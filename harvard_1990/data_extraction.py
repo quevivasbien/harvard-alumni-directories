@@ -38,26 +38,28 @@ with open('school_data_substitutions.json', 'r') as fh:
 
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
-DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_2000_2.2.2022.txt')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1990_2.3.2022.txt')
 
-with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
-    text = fh.read()
 
 
 # #### FORMAT TEXT DATA
 
-# Cut off introductory material
-text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
+def import_text() -> list:
+    with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
+        text = fh.read()
+    # Cut off introductory material
+    text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
 
-# split into smaller subtexts for parallel pre-processing
-lines = text.split('\n')
-nlines = len(lines)
-ngroups = min(20, multiprocessing.cpu_count())
-lines_per_group = nlines // ngroups
-texts = [
-    '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
-]
-texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
+    # split into smaller subtexts for parallel pre-processing
+    lines = text.split('\n')
+    nlines = len(lines)
+    ngroups = min(20, multiprocessing.cpu_count())
+    lines_per_group = nlines // ngroups
+    texts = [
+        '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
+    ]
+    texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
+    return texts
 
 
 
@@ -90,9 +92,7 @@ def fix_common_typos(text: str) -> str:
 
 def split_lines(text: str) -> str:
     # split profiles that are on the same line
-    # with standard profile endings
     text = re.sub(r'(?<=[^\n]{20}[^\n\[]{15}(?:[^\n\[][A-Za-z ][a-zVASPE’*\']|\D\d\d)) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s?[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
-    # profiles that are maiden names
     text = re.sub(r'(?<=[^\n]{30}[A-Za-z\d\)][\]\)\}]) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
     return text
 
@@ -196,7 +196,7 @@ alt_zip1_re = re.compile(r'(.*?[^A-Za-z][A-Z]{2})\s\d{2}\S{2,}(?:\s(\D.*)|$)')
 alt_zip2_re = re.compile(r'(.*?\D\d{5}(?:-\d{4})?)(?:\s(\D.*)|$)')
 alt_zip3_re = re.compile(r'(.*?(?:,|\.) [A-Z]{2})\s(.*)')
 house_re = re.compile(r'(?:^| )([A-Z][A-Za-z])\s+(\D.*)')
-degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2}|s)? ?){1,}\))?)(?:\s([msclwhd\(\)]{2,4}))?')
+degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2})? ?){1,}\))?)(?:\s([msclwhd\(\)]{2,4}))?')
 occupation_re = re.compile(r'(?<=\s)[A-Z][A-Za-z]{1,2}$')
 other_name_re = re.compile(r'^[\[\(\{\]](.+?)(?:[\]\)\}]|(?:[\[jlJiI](?:,|\.|$)))(?:(?:,|\.)?\s+(.+))?')
 profile_re = re.compile(r'^([^A-Za-z\s]|[tf])?\s*?((?:[A-Z]+ )*[A-Z\-ÖÄÏÜ\'’a-z]+)(?:,|\.)?\s*([^,.\(\[]+)(?:,|\.)?\s*(.+)')
@@ -473,11 +473,11 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
-    text = parallel_preprocess_text(texts)
+    text = parallel_preprocess_text(import_text())
 
     data = parallel_process_all(text.split('\n'))
 
-    with open(os.path.join(DATA_DIR, 'data_2000.json'), 'w', encoding='utf-8') as fh:
+    with open(os.path.join(DATA_DIR, 'data_1990.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
     # for datum in data:

@@ -3,7 +3,7 @@ import re
 import json
 import typing
 
-import multiprocessing
+import multiprocessing  # who needs C++ when you have loads of CPU cores? ;P
 
 #### IMPORT FILES TO BE USED LATER
 
@@ -37,24 +37,27 @@ with open('school_data_substitutions.json', 'r') as fh:
 #### READ IN TEXT DATA
 
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
-DATA_1986 = os.path.join(DATA_DIR, 'directory_1986')
+OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_2005_1.28.2022.txt')
 
-filenames = [os.path.join(DATA_1986, f) for f in os.listdir(DATA_1986) if f.endswith('.txt')]
-
-text = ''
-
-def read_file(filename):
-    with open(filename, 'r', encoding='utf-8') as fh:
-        text = fh.read()
-    return text
-
-texts = [read_file(f) for f in filenames]
+with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
+    text = fh.read()
 
 
 #### FORMAT TEXT DATA
 
 # Cut off introductory material
-texts[0] = re.search(r'(?<=Alphabetical Roster of Alumni).+', texts[0], flags=re.DOTALL).group()
+text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
+
+# split into smaller subtexts for parallel pre-processing
+lines = text.split('\n')
+nlines = len(lines)
+ngroups = min(20, multiprocessing.cpu_count())
+lines_per_group = nlines // ngroups
+texts = [
+    '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
+]
+texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
 
 
 def fix_common_typos(text: str) -> str:
@@ -69,38 +72,40 @@ def fix_common_typos(text: str) -> str:
     text = re.sub(r' A2(?= \d{5})', ' AZ', text)
     text = re.sub(r'(?<=[A-Z\-])[1l](?=[A-Z\-])', 'I', text)
     text = re.sub(r'(?<=\n)MC (?=[A-Z]{2})', 'MC', text)
+    text = re.sub(r'(?<=\n)\d\s*(?=[A-Z]+[,.] [A-Z])', '', text)
+    text = re.sub(r'(?<=[^A-Z]\s)[tf] ?(?=[A-Z\-ÖÄÏÜ\'’]+[,.])', '+ ', text)
+    text = text.replace('§', 'S').replace('ß', 'B')
     return text
 
 
 def split_lines(text: str) -> str:
     # split profiles that are on the same line
-    text = re.sub(r'(?<=[^\n]{20}[^\n\[]{15}(?:[^\n\[][A-Za-z ][a-zVASPE’*\']|\D\d\d)) (?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{30}[A-Za-z\d\)][\]\)\}]) (?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{20}[^\n\[]{15}(?:[^\n\[][A-Za-z ][a-zVASPE’*\']|\D\d\d)) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s?[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{30}[A-Za-z\d\)][\]\)\}]) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
     return text
 
 
 def unsplit_lines(text: str) -> str:
     # Figure out where a line break does not signify a new profile, and remove those line breaks
     # first try a couple of basic text substitutions
-    text = re.sub(r'\n(?=[A-Z]?[a-z\d\]])', ' ', text)
+    text = re.sub(r'\n(?=(?:[A-Z]?[a-eg-su-z\d\]]|[A-Z][a-z\d\]]))', ' ', text)
     text = re.sub(r'\n(?=[A-Z]{1,3}\s\d\d\s)', ' ', text)
     text= re.sub(r'(?<=\[SEE)\n(?=[A-Z]{2})', ' ', text)
     text = re.sub(r'(?<=[A-Za-z])\n(?=[IV]{1,3}(?:,|\.))', ' ', text)
     text = re.sub(r'\n(?=[A-Z]{2} \d{5})', ' ', text)
     text = re.sub(r'\n(?=\S\s*\d)', ' ', text)
     text = re.sub(r'(?<=Apt)\n(?=\S{1,4}(?:,|\.))', ' ', text)
-    text = re.sub(r'\n(?=[^A-Z]?\s*[^AEIOUÖÄÏÜY]{5})', ' ', text)
+    text = re.sub(r'\n(?=[^A-Z]?\s*(?:[^AEIOUÖÄÏÜY]{5}|[^AEIOUÖÄÏÜY,.]+[,.]))', ' ', text)
     # remove page number indicators
     text = re.sub(r'\n\d+(?:\s[A-Z\-]+)?\n', '\n', text)
     text = re.sub(r'\n[A-Z\-]+\s\d+\n', '\n', text)
     # now a more complicated procedure based on the expected first couple letters of each line
-    # TODO: Fix this!
     lines_to_unsplit = []
     line_start_2 = '~~'
     line_start_1 = '~~'
     last_idx = -1
     for i, line in enumerate(text.split('\n')):
-        line_start_0_search = re.search(r'.{0,3}?([A-Za-z])', line)
+        line_start_0_search = re.search(r'.{0,3}?([A-Za-z]{2}|[A-Z].)', line)
         if line_start_0_search is None:
             # this line is out of place
             lines_to_unsplit.append(i)
@@ -108,7 +113,10 @@ def unsplit_lines(text: str) -> str:
         line_start_0 = line_start_0_search.group(1)
         # figure out if previous line is out of place
 
-        if i > 1 and line_start_2 == line_start_0 and line_start_1 != line_start_2:
+        if i > 1 and (
+            (line_start_2[0] == line_start_0[0] and line_start_1[0] != line_start_2[0])
+            or (line_start_2 == line_start_0 and line_start_1 != line_start_2)
+        ):
             lines_to_unsplit.append(last_idx)
         last_idx = i
         line_start_2 = line_start_1
@@ -125,10 +133,10 @@ def unsplit_lines(text: str) -> str:
 def split_lines2(text: str) -> str:
     # do another pass to split things that shouldn't have been combined
     text = re.sub(r'(?<=[^\n]{25}[^\n\[\(\{]{15}[A-Za-z\d\]\)\}]) (?=[^A-Za-z]?\s*(?:[A-Z\-ÖÄÏÜ\'’]{5,}|NG)(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{35}(?:\(|\-)\d\d\)) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) (?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{35}(?:.[A-Z]{2}|[A-Z][A-Za-z][A-Z]) \d\d) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?:\(|\-)\d\d\)) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?:.[A-Z]{2}|[A-Z][A-Za-z][A-Z]) \d\d) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
     for code in OCCUPATION_CODES:
-        text = re.sub(r'(?<=[^\n]{25}[^\n\[]{15}(?:\d\d|cl| d|\d\)) ' + code + r') (?=[^A-Za-z]?\s*\S+(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+        text = re.sub(r'(?<=[^\n]{25}[^\n]{15}(?:\d\d|cl| d|\d[\)\]]) ' + code + r') (?=[^A-Za-z]?\s*\S+(?:,|\.) ?(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
     return text
 
 
@@ -169,7 +177,7 @@ text = parallel_preprocess_text(texts)
 
 #### NOW EXTRACT DATA FROM TEXT
 
-# compile frequent  ly used regexes
+# compile frequently used regexes
 dead_re = re.compile(r'd(?:,|\.)?\s+(.*?\d ?\d{3})(?:,|\.)?\s*(.*)')
 reported_dead_re = re.compile(r'Reported Dead(?:,|\.)\s+(.+)')
 zip_re = re.compile(r'(.*?[^A-Za-z][A-Za-z] ?[A-Za-z](?:,|\.)?\s*\d{5}(?:-\d{4})?)(?:\s?(\D.*)|$)')
@@ -177,10 +185,10 @@ alt_zip1_re = re.compile(r'(.*?[^A-Za-z][A-Z]{2})\s\d{2}\S{2,}(?:\s(\D.*)|$)')
 alt_zip2_re = re.compile(r'(.*?\D\d{5}(?:-\d{4})?)(?:\s(\D.*)|$)')
 alt_zip3_re = re.compile(r'(.*?(?:,|\.) [A-Z]{2})\s(.*)')
 house_re = re.compile(r'(?:^| )([A-Z][A-Za-z])\s+(\D.*)')
-degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2})? ?){1,}\))?)(?:\s([msclw]{1,3}))?')
+degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2})? ?){1,}\))?)(?:\s([msclwhd\(\)]{2,4}))?')
 occupation_re = re.compile(r'(?<=\s)[A-Z][A-Za-z]{1,2}$')
 other_name_re = re.compile(r'^[\[\(\{\]](.+?)(?:[\]\)\}]|(?:[\[jlJiI](?:,|\.|$)))(?:(?:,|\.)?\s+(.+))?')
-profile_re = re.compile(r'^([^A-Za-z\s])?\s*?((?:[A-Z]+ )*[A-Z\-ÖÄÏÜ\'’a-z]+)(?:,|\.)?\s*([^,.\(\[]+)(?:,|\.)?\s*(.+)')
+profile_re = re.compile(r'^([^A-Za-z\s]|[tf])?\s*?((?:[A-Z]+ )*[A-Z\-ÖÄÏÜ\'’a-z]+)(?:,|\.)?\s*([^,.\(\[]+)(?:,|\.)?\s*(.+)')
 name_re = re.compile(r'^(\d?[A-Za-z\-ÖÄÏÜ\'’]+)(?:,|\.)?\s?(.*)')
 
 
@@ -379,12 +387,13 @@ def process_line(line: str) -> dict:
 def get_datum(line: str, last_line: str = '') -> typing.Tuple[dict, str]:
     if last_line:
         datum = process_line(f'{last_line} {line}')
-        if not datum:
+        new_datum = process_line(line)
+        if not datum and not new_datum:
             return {}, ''
-        if 'had_error' in datum['notes']:
-            datum = process_line(line)
-            if not datum:
-                return {}, ''
+        if new_datum and 'had_error' not in new_datum['notes']:
+            datum = new_datum
+        elif not datum:
+            return {}, ''
     else:
         datum = process_line(line)
         if not datum:
@@ -418,13 +427,23 @@ def process_all(lines: list) -> list:
         try:
             datum, new_last_line = get_datum(line, last_line)
             if last_datum and (new_last_line or not last_line):
+                has_problem = (
+                    (last_datum.get('house_code') and last_datum['house_code'].endswith('?'))
+                    or (
+                        last_datum.get('attendance') and any(
+                            x['degree_code'].endswith('?') for x in last_datum['attendance'] if x.get('degree_code')
+                        )
+                    )
+                )
+                if has_problem and 'had_error' not in last_datum['notes']:
+                    last_datum['notes'].append('had_error')
                 data.append(last_datum)
             last_line = new_last_line
             last_datum = datum
         except (AttributeError, TypeError, ValueError) as e:
             print(f'ERROR: {e} in "{line}"')
-            # raise
-    data.append(last_datum)
+    if last_datum:
+        data.append(last_datum)
     return merge_wives(data)
 
 
@@ -446,25 +465,31 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
+    # import sys
+    # args = sys.argv
+
     data = parallel_process_all(text.split('\n'))
 
-    with open(os.path.join(DATA_DIR, 'data_1986.json'), 'w', encoding='utf-8') as fh:
+    with open(os.path.join(DATA_DIR, 'data_2005.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
-    # for datum in data:
-    #     if 'had_error' in datum['notes'] and 'SEE' not in datum['raw']:
-    #         print(datum['raw'])
+    for datum in data:
+        if 'had_error' in datum['notes'] and 'SEE' not in datum['raw']:
+            print(datum['raw'])
 
-    from collections import Counter
+    # from collections import Counter
 
-    codes_not_found = []
-    for d in data:
-        code = d.get('house_code')
-        if code and code not in HOUSE_CODES:
-            codes_not_found.append(code)
+    # codes_not_found = []
+    # for d in data:
+    #     code = d.get('house_code')
+    #     if code and code not in HOUSE_CODES:
+    #         codes_not_found.append(code)
 
-    c = Counter(codes_not_found)
+    # c = Counter(codes_not_found)
 
-    print(c.most_common())
+    # print(c.most_common())
+
+    # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
+
 
     # print('\n'.join([d['raw'] for d in data if d.get('attendance') is not None and any(a['degree_code'] == 'MA?' for a in d['attendance'] if a.get('degree_code'))]))

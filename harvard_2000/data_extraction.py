@@ -36,14 +36,15 @@ with open('school_data_substitutions.json', 'r') as fh:
 
 #### READ IN TEXT DATA
 
-DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/ocr_ed/'
-DATA_FILENAME = os.path.join(DATA_DIR, 'alumni_directory_2000_2.2.2022.txt')
+DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
+OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_2000_2.2.2022.txt')
 
 with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
     text = fh.read()
 
 
-#### FORMAT TEXT DATA
+# #### FORMAT TEXT DATA
 
 # Cut off introductory material
 text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
@@ -57,6 +58,7 @@ texts = [
     '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
 ]
 texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
+
 
 
 def fix_common_typos(text: str) -> str:
@@ -73,6 +75,7 @@ def fix_common_typos(text: str) -> str:
     text = re.sub(r'(?<=\n)MC (?=[A-Z]{2})', 'MC', text)
     text = re.sub(r'(?<=\n)\d\s*(?=[A-Z]+[,.] [A-Z])', '', text)
     text = re.sub(r'(?<=[^A-Z]\s)[tf] ?(?=[A-Z\-ÖÄÏÜ\'’]+[,.])', '+ ', text)
+    text = re.sub(r'(?<=[A-Za-z]) (?=(?:Address )?Unknown?|Requested No Mail)', ', ', text)
     text = text.replace('§', 'S').replace('ß', 'B')
     return text
 
@@ -132,10 +135,11 @@ def unsplit_lines(text: str) -> str:
 def split_lines2(text: str) -> str:
     # do another pass to split things that shouldn't have been combined
     text = re.sub(r'(?<=[^\n]{25}[^\n\[\(\{]{15}[A-Za-z\d\]\)\}]) (?=[^A-Za-z]?\s*(?:[A-Z\-ÖÄÏÜ\'’]{5,}|NG)(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{35}(?:\(|\-)\d\d\)) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?:(?:\(|\-)\d\d\)|hon\))) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
     text = re.sub(r'(?<=[^\n]{35}(?:.[A-Z]{2}|[A-Z][A-Za-z][A-Z]) \d\d) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?: \d\d|\d\d\)|[A-Z][a-z]{2})) ((?:\S+\s){0,2}\S+)[,.]?(?= (?:Ms|Dr|Prof|Miss) .{,20}[,.])', '\n\\1,', text)
     for code in OCCUPATION_CODES:
-        text = re.sub(r'(?<=[^\n]{25}[^\n]{15}(?:\d\d|cl| d|\d[\)\]]) ' + code + r') (?=[^A-Za-z]?\s*\S+(?:,|\.) ?(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+        text = re.sub(r'(?<=[^\n]{25}[^\n]{15}(?:\d\d|cl| d|\d[\)\]]) ' + code + r') (?=[^A-Za-z]?\s*(?:(?:\S+\s){0,2}\S+(?:,|\.) ?|[A-Z]+ )(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
     return text
 
 
@@ -169,8 +173,6 @@ def parallel_preprocess_text(texts: list) -> str:
     text = '\n'.join(texts)
     return text
 
-
-text = parallel_preprocess_text(texts)
 # print(text)
 
 
@@ -178,7 +180,7 @@ text = parallel_preprocess_text(texts)
 
 # compile frequently used regexes
 dead_re = re.compile(r'd(?:,|\.)?\s+(.*?\d ?\d{3})(?:,|\.)?\s*(.*)')
-reported_dead_re = re.compile(r'Reported Dead(?:,|\.)\s+(.+)')
+reported_dead_re = re.compile(r'(?:Reported Dead|[\(\[]date unknown[\)\]])(?:,|\.)\s+(.+)')
 zip_re = re.compile(r'(.*?[^A-Za-z][A-Za-z] ?[A-Za-z](?:,|\.)?\s*\d{5}(?:-\d{4})?)(?:\s?(\D.*)|$)')
 alt_zip1_re = re.compile(r'(.*?[^A-Za-z][A-Z]{2})\s\d{2}\S{2,}(?:\s(\D.*)|$)')
 alt_zip2_re = re.compile(r'(.*?\D\d{5}(?:-\d{4})?)(?:\s(\D.*)|$)')
@@ -386,12 +388,13 @@ def process_line(line: str) -> dict:
 def get_datum(line: str, last_line: str = '') -> typing.Tuple[dict, str]:
     if last_line:
         datum = process_line(f'{last_line} {line}')
-        if not datum:
+        new_datum = process_line(line)
+        if not datum and not new_datum:
             return {}, ''
-        if 'had_error' in datum['notes']:
-            datum = process_line(line)
-            if not datum:
-                return {}, ''
+        if new_datum and 'had_error' not in new_datum['notes']:
+            datum = new_datum
+        elif not datum:
+            return {}, ''
     else:
         datum = process_line(line)
         if not datum:
@@ -425,13 +428,23 @@ def process_all(lines: list) -> list:
         try:
             datum, new_last_line = get_datum(line, last_line)
             if last_datum and (new_last_line or not last_line):
+                has_problem = (
+                    (last_datum.get('house_code') and last_datum['house_code'].endswith('?'))
+                    or (
+                        last_datum.get('attendance') and any(
+                            x['degree_code'].endswith('?') for x in last_datum['attendance'] if x.get('degree_code')
+                        )
+                    )
+                )
+                if has_problem and 'had_error' not in last_datum['notes']:
+                    last_datum['notes'].append('had_error')
                 data.append(last_datum)
             last_line = new_last_line
             last_datum = datum
         except (AttributeError, TypeError, ValueError) as e:
             print(f'ERROR: {e} in "{line}"')
-            # raise
-    data.append(last_datum)
+    if last_datum:
+        data.append(last_datum)
     return merge_wives(data)
 
 
@@ -446,36 +459,40 @@ def parallel_process_all(lines: list) -> list:
         lines_out = pool.map(process_all, line_allocs)
     return sum(lines_out, [])
 
-    
 
-
-# TODO: clean dates and names?
 
 if __name__ == "__main__":
 
-    # import sys
-    # args = sys.argv
+    text = parallel_preprocess_text(texts)
 
     data = parallel_process_all(text.split('\n'))
 
     with open(os.path.join(DATA_DIR, 'data_2000.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
-    for datum in data:
-        if 'had_error' in datum['notes'] and 'SEE' not in datum['raw']:
-            print(datum['raw'])
+    # for datum in data:
+    #     if 'had_error' in datum['notes'] and 'SEE' not in datum['raw']:
+    #         print(datum['raw'])
 
-    # from collections import Counter
+    from collections import Counter
 
-    # codes_not_found = []
+    codes_not_found = []
     # for d in data:
     #     code = d.get('house_code')
     #     if code and code not in HOUSE_CODES:
     #         codes_not_found.append(code)
+    for d in data:
+        attendance = d.get('attendance')
+        if not attendance:
+            continue
+        for item in attendance:
+            degree_code = item.get('degree_code')
+            if degree_code and degree_code not in DEGREE_CODES:
+                codes_not_found.append(degree_code)
 
-    # c = Counter(codes_not_found)
+    c = Counter(codes_not_found)
 
-    # print(c.most_common())
+    print(c.most_common())
 
     # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
 

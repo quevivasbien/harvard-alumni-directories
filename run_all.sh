@@ -1,4 +1,7 @@
-cd harvard_1986
+cd ./harvard_1980
+python data_extraction.py
+
+cd ../harvard_1986
 python data_extraction.py
 
 cd ../harvard_1990

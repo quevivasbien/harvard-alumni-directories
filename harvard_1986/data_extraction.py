@@ -40,38 +40,47 @@ DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
 DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1986_2.7.2022.txt')
 
-with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
-    text = fh.read()
 
-
-#### FORMAT TEXT DATA
-
-# Cut off introductory material
-text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
-
-# split into smaller subtexts for parallel pre-processing
-lines = text.split('\n')
-nlines = len(lines)
-ngroups = min(20, multiprocessing.cpu_count())
-lines_per_group = nlines // ngroups
-texts = [
-    '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
-]
-texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
+def import_text() -> str:
+    with open(DATA_FILENAME, 'r', encoding='utf-8') as fh:
+        text = fh.read()
+    # Cut off introductory material
+    text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
+    return text
 
 
 def fix_common_typos(text: str) -> str:
-    text = re.sub(r'(?<= [MWHR])[li](?= \d)', 'I', text)
+    # fix cases where chars are substituted for numbers
     text = re.sub(r'(?<=\d)S(?=[\d ])', '5', text)
     text = re.sub(r'(?<=[\d ])€(?=[\d ])', '6', text)
     text = re.sub(r'(?<=[\dO])O(?=[\dO])', '0', text)
     text = re.sub(r'(?<=\d)B(?=\d)', '8', text)
+    # fix cases where chars are substituted for letters
     text = re.sub(r'(?<=[A-Z])8(?=[A-Z])', 'B', text)
     text = re.sub(r'(?<=[A-Z])80(?=[A-Z])', 'BO', text)
+    text = re.sub(r'(?<=[A-Z\-])[1l](?=[A-Z\-])', 'I', text)
+    # fix state abbreviation typos
     text = re.sub(r' LIT(?= \d{5})', ' UT', text)
     text = re.sub(r' A2(?= \d{5})', ' AZ', text)
-    text = re.sub(r'(?<=[A-Z\-])[1l](?=[A-Z\-])', 'I', text)
+    # remove stray numbers at the start of a profile line
+    text = re.sub(r'(?<=\n)\d\s*(?=[A-Z]+[,.] [A-Z])', '', text)
+    # fix cases where t or f is substituted for + (dead) marker
+    text = re.sub(r'(?<=[^A-Z]\s)■?[tf] ?(?=[A-Z\-ÖÄÏÜ\'’]+[,.])', '+ ', text)
+    # add missing commas in case of unknown address
+    text = re.sub(r'(?<=[A-Za-z]) (?=(?:Address )?Unknown?|Requested No Mail)', ', ', text)
+    # miscellaneous fixes
+    text = re.sub(r'(?<= [MWHR])[li](?= \d)', 'I', text)
     text = re.sub(r'(?<=\n)MC (?=[A-Z]{2})', 'MC', text)
+    text = re.sub(r'(\d{5}|,)[1\(]ST ', '\\1 IST ', text)
+    text = text.replace(
+        '§', 'S'
+    ).replace(
+        'ß', 'B'
+    ).replace(
+        '£', 'E'
+    ).replace(
+        '’', '\''
+    )
     return text
 
 
@@ -128,10 +137,13 @@ def unsplit_lines(text: str) -> str:
 def split_lines2(text: str) -> str:
     # do another pass to split things that shouldn't have been combined
     text = re.sub(r'(?<=[^\n]{25}[^\n\[\(\{]{15}[A-Za-z\d\]\)\}]) (?=[^A-Za-z]?\s*(?:[A-Z\-ÖÄÏÜ\'’]{5,}|NG)(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{35}(?:\(|\-)\d\d\)) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) (?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
-    text = re.sub(r'(?<=[^\n]{35}(?:.[A-Z]{2}|[A-Z][A-Za-z][A-Z]) \d\d) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
-    for code in OCCUPATION_CODES:
-        text = re.sub(r'(?<=[^\n]{25}[^\n\[]{15}(?:\d\d|cl| d|\d\)) ' + code + r') (?=[^A-Za-z]?\s*\S+(?:,|\.) (?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?:(?:\(|\-)\d\d\)|hon\))) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]{2}|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?:.[A-Z]{2}|[A-Z][A-Za-z][A-Z]) \d\d) (?=[^A-Za-z]?\s*[A-Z]{2}\S*(?:,|\.) ?(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\n', text)
+    text = re.sub(r'(?<=[^\n]{35}(?: \d\d|\d\d\)|[A-Z][a-z]{2})) ((?:\S+ ){0,2}\S+?)[,.]?(?= (?:Ms|Dr|Prof|Miss) .{,20}[,.])', '\n\\1,', text)
+    code_block = '|'.join(OCCUPATION_CODES)
+    text = re.sub(r'(?<=[^\n]{25}[^\n]{15}(?:\d\d|cl| d|\d[\)\]]) )(' + code_block + r') (?=[^A-Za-z]?\s*(?:(?:\S+\s){0,2}\S+(?:,|\.) ?|[A-Z]+ )(?:[A-Z][a-z]|[A-Z] [A-Z][a-z]))', '\\1\n', text)
+    text = re.sub(rf'(?<=[^,] )({code_block}) (?=\D)', '\\1\n', text)
+    text = re.sub(rf'({code_block})\t\s*', '\\1\n', text)
     return text
 
 
@@ -158,15 +170,23 @@ def preprocess_text(text: str) -> str:
     )
 
 
-def parallel_preprocess_text(texts: list) -> str:
+def parallel_preprocess_text(text: str) -> str:
     """Just helpful for making things go faster"""
+    # split into smaller subtexts
+    lines = text.split('\n')
+    nlines = len(lines)
+    ngroups = min(20, multiprocessing.cpu_count())
+    lines_per_group = nlines // ngroups
+    texts = [
+        '\n'.join(lines[i*lines_per_group:(i+1)*lines_per_group]) for i in range(ngroups)
+    ]
+    texts[-1] += '\n'.join(lines[(ngroups+1)*lines_per_group:])
+    # now just pass in parallel through text processing function
     with multiprocessing.Pool(len(texts)) as pool:
         texts = pool.map(preprocess_text, texts)
     text = '\n'.join(texts)
     return text
 
-
-text = parallel_preprocess_text(texts)
 # print(text)
 
 
@@ -307,7 +327,10 @@ def get_school_data(info: str) -> dict:
     # next look for occupation code
     occupation_search = occupation_re.search(info)
     if occupation_search is not None:
-        fields['occupation_code'] = occupation_search.group()
+        occupation = occupation_search.group()
+        if occupation not in OCCUPATION_CODES:
+            occupation += '?'
+        fields['occupation_code'] = occupation
     return fields
 
 
@@ -421,13 +444,24 @@ def process_all(lines: list) -> list:
         try:
             datum, new_last_line = get_datum(line, last_line)
             if last_datum and (new_last_line or not last_line):
+                has_problem = (
+                    (last_datum.get('house_code') and last_datum['house_code'].endswith('?'))
+                    or (
+                        last_datum.get('attendance') and any(
+                            x['degree_code'].endswith('?') for x in last_datum['attendance'] if x.get('degree_code')
+                        )
+                    )
+                    or (last_datum.get('occupation_code') and last_datum['occupation_code'].endswith('?'))
+                )
+                if has_problem and 'had_error' not in last_datum['notes']:
+                    last_datum['notes'].append('had_error')
                 data.append(last_datum)
             last_line = new_last_line
             last_datum = datum
         except (AttributeError, TypeError, ValueError) as e:
             print(f'ERROR: {e} in "{line}"')
-            # raise
-    data.append(last_datum)
+    if last_datum:
+        data.append(last_datum)
     return merge_wives(data)
 
 
@@ -449,6 +483,8 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
+    text = parallel_preprocess_text(import_text())
+
     data = parallel_process_all(text.split('\n'))
 
     with open(os.path.join(DATA_DIR, 'data_1986.json'), 'w', encoding='utf-8') as fh:
@@ -460,14 +496,40 @@ if __name__ == "__main__":
 
     from collections import Counter
 
-    codes_not_found = []
+    house_codes_not_found = []
     for d in data:
         code = d.get('house_code')
-        if code and code not in HOUSE_CODES:
-            codes_not_found.append(code)
+        if code and code.endswith('?'):
+            house_codes_not_found.append(code)
 
-    c = Counter(codes_not_found)
+    c_house = Counter(house_codes_not_found)
+    print(c_house.most_common())
 
-    print(c.most_common())
+    
+    degree_codes_not_found = []
+    for d in data:
+        attendance = d.get('attendance')
+        if not attendance:
+            continue
+        for item in attendance:
+            degree_code = item.get('degree_code')
+            if degree_code and degree_code.endswith('?'):
+                degree_codes_not_found.append(degree_code)
+
+    c_deg = Counter(degree_codes_not_found)
+    print(c_deg.most_common())
+    
+    occupations_not_found = []
+    for d in data:
+        code = d.get('occupation_code')
+        if code and code.endswith('?'):
+            occupations_not_found.append(code)
+        
+    c_occ = Counter(occupations_not_found)
+    print(c_occ.most_common())
+
+    error_count = len([d for d in data if 'had_error' in d['notes']])
+    n_data =  len(data)
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
 
     # print('\n'.join([d['raw'] for d in data if d.get('attendance') is not None and any(a['degree_code'] == 'MA?' for a in d['attendance'] if a.get('degree_code'))]))

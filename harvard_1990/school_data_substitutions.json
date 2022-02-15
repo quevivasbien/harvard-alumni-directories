@@ -59,5 +59,14 @@
     "(\\d\\d)[,.]1ST": "\\2, IST",
     "MIA": "MLA",
     "([A-Z][a-z])RB": "\\2 AB",
-    "M LA": "MLA"
+    "M LA": "MLA",
+    "Ref": "Ret",
+    "R[soa]t": "Ret",
+    "Het": "Ret",
+    "Sc": "Sci",
+    "Sfu": "Stu",
+    "L[sqb]w": "Law",
+    "Sus": "Bus",
+    "Ser": "Sci",
+    "Ena": "Eng"
 }

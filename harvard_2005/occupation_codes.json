@@ -15,9 +15,11 @@
     "Med",
     "Min",
     "Nfp",
+    "Ran",
     "Ret",
     "Sci",
     "Stu",
     "Trd",
-    "Vol"
+    "Vol",
+    "Oth"
 ]

@@ -319,7 +319,10 @@ def get_school_data(info: str) -> dict:
     # next look for occupation code
     occupation_search = occupation_re.search(info)
     if occupation_search is not None:
-        fields['occupation_code'] = occupation_search.group()
+        occupation = occupation_search.group()
+        if occupation not in OCCUPATION_CODES:
+            occupation += '?'
+        fields['occupation_code'] = occupation
     return fields
 
 
@@ -442,6 +445,7 @@ def process_all(lines: list) -> list:
                             x['degree_code'].endswith('?') for x in last_datum['attendance'] if x.get('degree_code')
                         )
                     )
+                    or (last_datum.get('occupation_code') and last_datum['occupation_code'].endswith('?'))
                 )
                 if has_problem and 'had_error' not in last_datum['notes']:
                     last_datum['notes'].append('had_error')
@@ -496,7 +500,7 @@ if __name__ == "__main__":
     house_codes_not_found = []
     for d in data:
         code = d.get('house_code')
-        if code and code not in HOUSE_CODES:
+        if code and code.endswith('?'):
             house_codes_not_found.append(code)
 
     c_house = Counter(house_codes_not_found)
@@ -510,11 +514,24 @@ if __name__ == "__main__":
             continue
         for item in attendance:
             degree_code = item.get('degree_code')
-            if degree_code and degree_code not in DEGREE_CODES:
+            if degree_code and degree_code.endswith('?'):
                 degree_codes_not_found.append(degree_code)
 
     c_deg = Counter(degree_codes_not_found)
     print(c_deg.most_common())
+    
+    occupations_not_found = []
+    for d in data:
+        code = d.get('occupation_code')
+        if code and code.endswith('?'):
+            occupations_not_found.append(code)
+        
+    c_occ = Counter(occupations_not_found)
+    print(c_occ.most_common())
+
+    error_count = len([d for d in data if 'had_error' in d['notes']])
+    n_data =  len(data)
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
 
     # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
 

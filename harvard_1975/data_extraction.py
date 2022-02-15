@@ -16,9 +16,6 @@ with open('countries.json', 'r') as fh:
 with open('house_codes.json', 'r') as fh:
     HOUSE_CODES = json.load(fh)
 
-with open('school_codes.json', 'r') as fh:
-    SCHOOL_CODES = json.load(fh)
-
 with open('degree_codes.json', 'r') as fh:
     DEGREE_CODES = json.load(fh)
 
@@ -34,11 +31,9 @@ with open('school_data_substitutions.json', 'r') as fh:
         )
 
 
-#### READ IN TEXT DATA
-
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
-DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_2000_2.2.2022.txt')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1975_2.3.2022.txt')
 
 
 def import_text() -> str:
@@ -47,7 +42,6 @@ def import_text() -> str:
     # Cut off introductory material
     text = re.search(r'(?<=Alphabetical Roster of Alumni).+', text, flags=re.DOTALL|re.IGNORECASE).group()
     return text
-
 
 
 def fix_common_typos(text: str) -> str:
@@ -87,9 +81,7 @@ def fix_common_typos(text: str) -> str:
 
 def split_lines(text: str) -> str:
     # split profiles that are on the same line
-    # with standard profile endings
     text = re.sub(r'(?<=[^\n]{20}[^\n\[]{15}(?:[^\n\[][A-Za-z ][a-zVASPE’*\']|\D\d\d)) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s?[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
-    # profiles that are maiden names
     text = re.sub(r'(?<=[^\n]{30}[A-Za-z\d\)][\]\)\}]) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
     return text
 
@@ -192,8 +184,6 @@ def parallel_preprocess_text(text: str) -> str:
     text = '\n'.join(texts)
     return text
 
-# print(text)
-
 
 #### NOW EXTRACT DATA FROM TEXT
 
@@ -205,8 +195,8 @@ alt_zip1_re = re.compile(r'(.*?[^A-Za-z][A-Z]{2})\s\d{2}\S{2,}(?:\s(\D.*)|$)')
 alt_zip2_re = re.compile(r'(.*?\D\d{5}(?:-\d{4})?)(?:\s(\D.*)|$)')
 alt_zip3_re = re.compile(r'(.*?(?:,|\.) [A-Z]{2})\s(.*)')
 house_re = re.compile(r'(?:^| )([A-Z][A-Za-z])\s+(\D.*)')
-degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2}|s)? ?){1,}\))?)(?:\s([msclwhd\(\)]{2,4}))?')
-occupation_re = re.compile(r'(?<=\s)[A-Z][A-Za-z]{1,2}$')
+degree_re = re.compile(r'([A-Z][A-Za-z]{0,2})\s(\d{2}(?:\s?\((?:\d{2}(?:\-\d{2})? ?){1,}\))?)(?:\s([msclwhd\(\)]{2,4}))?')
+occupation_re = re.compile(r'(?<=\s)[A-Z]\S{1,2}$')
 other_name_re = re.compile(r'^[\[\(\{\]](.+?)(?:[\]\)\}]|(?:[\[jlJiI](?:,|\.|$)))(?:(?:,|\.)?\s+(.+))?')
 profile_re = re.compile(r'^([^A-Za-z\s]|[tf])?\s*?((?:[A-Z]+ )*[A-Z\-ÖÄÏÜ\'’a-z]+)(?:,|\.)?\s*([^,.\(\[]+)(?:,|\.)?\s*(.+)')
 name_re = re.compile(r'^(\d?[A-Za-z\-ÖÄÏÜ\'’]+)(?:,|\.)?\s?(.*)')
@@ -297,10 +287,7 @@ def process_degree_data(degree_search: list) -> list:
         fields = {
             'year': year
         }
-        # figure out if it's a school code or degree code
-        if code in SCHOOL_CODES:
-            fields['school_code'] = code
-        elif code in DEGREE_CODES:
+        if code in DEGREE_CODES:
             fields['degree_code'] = code
         else:
             fields['degree_code'] = code + '?'
@@ -349,7 +336,8 @@ def process_info_from_line(info: str, is_living: bool) -> dict:
     if other_name_search is not None:
         within_search = re.search(
             r'(SEE\s*)?(.+)',
-            other_name_search.group(1)
+            other_name_search.group(1),
+            flags=re.IGNORECASE
         )
         fields['alternate_name'] = within_search.group(2)
         if other_name_search.group(2) is None:
@@ -490,8 +478,10 @@ if __name__ == "__main__":
 
     data = parallel_process_all(text.split('\n'))
 
-    with open(os.path.join(DATA_DIR, 'data_2000.json'), 'w', encoding='utf-8') as fh:
+    with open(os.path.join(DATA_DIR, 'data_1975.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
+
+    # print(json.dumps(data, indent=1))
 
     from collections import Counter
 
@@ -530,6 +520,7 @@ if __name__ == "__main__":
     error_count = len([d for d in data if 'had_error' in d['notes']])
     n_data =  len(data)
     print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
+
 
     # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
 

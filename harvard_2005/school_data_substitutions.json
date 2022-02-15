@@ -54,5 +54,16 @@
     "[li1]/WAB": "Wi AB",
     "/?GAB": "Ki AB",
     "M D": "MD",
-    "PM D": "PMD"
+    "PM D": "PMD",
+    "Sei": "Sci",
+    "Re[if]": "Ret",
+    "Scl?": "Sci",
+    "Sfu": "Stu",
+    "[AR]n": "Fin",
+    "Ein": "Fin",
+    "Fm": "Fin",
+    "Sus": "Bus",
+    "Wmg": "Hmg",
+    "Are": "Arc",
+    "Ad": "Art"
 }

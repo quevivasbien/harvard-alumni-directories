@@ -1,4 +1,3 @@
-from audioop import add
 import os
 import re
 import json
@@ -72,7 +71,7 @@ def split_lines(text: str) -> str:
 def unsplit_lines(text: str) -> str:
     # Figure out where a line break does not signify a new profile, and remove those line breaks
     # first try a basic text substitutions
-    text = re.sub('\n(?!(?:[A-Z][A-Za-z\']*[ \-]|del? )*[A-Z][A-Za-z\']*[,.])', ' ', text)
+    text = re.sub(r'\n(?!(?:[A-Z][A-Za-z\']*[ \-]|del? )*[A-Z][A-Za-z\']*[,.])', ' ', text)
     lines_to_unsplit = []
     line_start_2 = '~~'
     line_start_1 = '~~'

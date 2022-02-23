@@ -7,5 +7,8 @@
     "(\\d) (\\d)": "\\2\\3",
     "Rc": "rc",
     "Rg": "rg",
-    "mel": "mcl"
+    "mel": "mcl",
+    "SP": "sp",
+    "MB A": "MBA",
+    "E’iot": "Eliot"
 }

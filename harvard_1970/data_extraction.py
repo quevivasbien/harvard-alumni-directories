@@ -40,8 +40,13 @@ DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1970_2.4.2022.txt')
 
 
 OCC_HOUSE_GROUP = '(?:' + '|'.join(OCCUPATION_CODES + HOUSE_CODES) + ')'
+OCC_GROUP = '(?:' + '|'.join(OCCUPATION_CODES) + ')'
 SCHOOL_DEG_GROUP = '(?:' + '|'.join(SCHOOL_CODES + DEGREE_CODES) + ')'
 HONORS_GROUP = '|'.join(['\\(hon\\)', 'cl', 'mcl', 'scl', 'w', '\\(s\\)'])
+
+LAST_NAME = r'(?:[A-Z][A-Za-z\'ä]*[ \-]|d[ie]l? ?|von |y )*[A-Z][A-Za-z\'ä]*'
+FIRST_NAME = r'(?:(?:Mrs|Dr) )?(?:[A-Z][a-zä]+ )?[A-Z][a-zä]+(?: \d\d)?(?:[,.] | \()'
+STATES = r'(?:Oregon|Ohio|Texas|Idaho|Puerto Rico|Conn|Maine|Florida|Virgin Islands|Alaska|Hawaii|Utah|Mass|Can|Cal|Mass|Ind|Kans|Md|Va|Ariz|Ill)'
 
 
 def import_text() -> str:
@@ -51,27 +56,68 @@ def import_text() -> str:
 
 
 def fix_common_typos(text: str) -> str:
-    text = re.sub(r'(?<=[a-z])l(?=\d\-)', '1', text)
-    text = re.sub(r'(?<=[a-z])ll(?=\-\d)', '11', text)
-    text = re.sub(r'(?<=[a-z])lO(?=\-\d)', '10', text)
+    # fix shifted punctuation marks
+    text = re.sub(r'(?<=[A-Za-z]) (,.)(?=[A-Za-z])', '\\1 ', text)
+    # get rid of periods after titles; not really a typo, just helps with consistency
+    text = re.sub('(?<=[ ,.])(Mrs|Dr|[A-Z])\.', '\\1', text)
+    # fix digit/letter mix-ups
+    text = re.sub(r'(?<=[A-Z])(\d) (?=\d\-)', ' \\1', text)
+    text = re.sub(r'(?<=[a-z])l ?(?=\d[\-\s\(,.])', '1', text)
+    text = re.sub(r'll(?=[\(\-]\d)', '11', text)
+    text = re.sub(r'(?<=[A-Za-z])[lI]O(?=\-\d)', '10', text)
+    text = re.sub(r'(?<=[a-z])Ol(?=\-\d)', '01', text)
+    text = re.sub(r'OO(?=\-\d\d)', '00', text)
+    text = re.sub(r'(?<=\s)o(?=\d\d)', 'c', text)
+    text = re.sub(r'(?<=\d\d\-)ll', '11', text)
+    text = re.sub(r'll(?=\-\d\d)', '11', text)
+    text = re.sub(r'(?<=[A-Za-z])I(?= ?\d\-)', '1', text)
+    text = re.sub(r'(?<=\s)U( ?\d\-)', 'L 1', text)
+    text = re.sub(r'(?<=\s)SO(?=\d\-)', 's0', text)
+    text = re.sub(r'(?<=\s[a-z])O(?=\d\-)', '0', text)
+    # some edits relating to degree codes, etc.
+    text = re.sub(r'(?<=[\d\-])O(?=[\d\-])', '0', text)
+    text = re.sub(r'(?<=\s)SP(?= ?\d\d)', 'sp', text)
+    text = re.sub(r'(?<=\s)0(?=\d\d[d\(\)\-]+)', 'c ', text)
+    text = re.sub(r'(?<=\d\d)r\-?(?=\d\d)', '-', text)
+    text = re.sub(r'([A-Z]{2,})([smwcl]{1,3})', '\\1 \\2', text)
+    text = re.sub(r'(?<= )([cw])l ?(?=\d\-)', '\\1 1', text)
+    text = re.sub(r'(?<=\s)C(?=\d\d)', 'c', text)
+    text = re.sub(r' ?\(Hon\) ?', ' (hon) ', text)
+    text = re.sub(r'¿[¡>]?(?=\d\d)', 'gb', text)
+    text = re.sub(r'¿(?=\d\D)', 'g5', text)
+    text = re.sub(r'(?<=\s)R[Cc](?=\d\d)', 'rc', text)
+    text = re.sub(r'(?<=\s)Rg(?=\d\d)', 'rg', text)
+    text = re.sub(r'(?<=\s)En&(?=\s)', 'Eng', text)
+    text = re.sub(r'Ed\.? ?Adm', 'EdAdm', text)  # scrunch these together just for convenience
+    text = re.sub(r' M Eng(?= |$)', 'MEng', text)
+    # misc punctuation edits
     text = re.sub(r'(?<=[A-Za-z][^,.])(?= see Mrs)', ',', text)
-    text = re.sub(r';(?= )', ',', text)
+    text = re.sub(r'[;:](?= )', ',', text)
+    # removing some marking characters that OCR has trouble with
+    text = re.sub(r'[■♦•*]', '', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    # some more misc edits
+    # so Jamaica, NY doesn't get picked up as country of jamaica:
+    text = re.sub('Jamaica Plain', 'JAMAICA PLAIN', text)  
+    text = re.sub('Jamaica(?=(?: \d+)?, N\.? ?Y)', 'JAMAICA', text)
+    # # get rid of spaces in zip codes
+    # text = re.sub(r'(\d) ?(\d) ?(\d) ?(\d) ?(\d)', r'\1\2\3\4\5', text)
+    text = text.replace('..', '.,').replace('’', '\'').replace('~', '-').replace('¿', 'g').replace('Madison, Wise', 'Madison, Wisc')
     return text
 
 
 def split_lines(text: str) -> str:
     # split profiles that are on the same line
-    text = re.sub(rf'(?<=. |\d\d)({OCC_HOUSE_GROUP}|{HONORS_GROUP}) (?=[A-Z][a-z]+\s*[,.] [A-Z][a-z]+,? )', '\\1\n', text)
-    text = re.sub(rf'(?<![EWNS] |.\d)((?: |\d\d){SCHOOL_DEG_GROUP}) (?=[A-Z][a-z]+\s*[,.] [A-Z][a-z]+,? )', '\\1\n', text)
-    # text = re.sub(r'(?<=[^\n]{20}[^\n\[]{15}(?:[^\n\[][A-Za-z ][a-zVASPE’*\']|\D\d\d)) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s?[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
-    # text = re.sub(r'(?<=[^\n]{30}[A-Za-z\d\)][\]\)\}]) +(?=\S??\s*[A-Z\-ÖÄÏÜ\'’]{3,}(?:,|\.)\s[A-Z][a-z ].{,20}(?:,|\.))', '\n', text)
+    text = re.sub(rf'(?<=. |\d\d)({OCC_HOUSE_GROUP}|{HONORS_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}[,.] {FIRST_NAME})', '\\1\n', text)
+    text = re.sub(rf'(?<![EWNS] |.\d)((?: |\d\d){SCHOOL_DEG_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}\s*[,.] {FIRST_NAME})', '\\1\n', text)
     return text
 
 
 def unsplit_lines(text: str) -> str:
     # Figure out where a line break does not signify a new profile, and remove those line breaks
     # first try a basic text substitutions
-    text = re.sub(r'\n(?!(?:[A-Z][A-Za-z\']*[ \-]|del? )*[A-Z][A-Za-z\']*[,.])', ' ', text)
+    text = re.sub(rf'\n(?!{LAST_NAME}[,.])', ' ', text)
+    text = re.sub(rf'\n(?={OCC_GROUP}[,.]{{0,2}} ?{SCHOOL_DEG_GROUP} ?\d\d)', ' ', text)
     lines_to_unsplit = []
     line_start_2 = '~~'
     line_start_1 = '~~'
@@ -104,7 +150,7 @@ def unsplit_lines(text: str) -> str:
 
 def split_lines2(text: str) -> str:
     # do another pass to split things that shouldn't have been combined
-    text = re.sub(r'(?<=[^\d]\d\d|\d\d\)) (?=\S+\s*[,.] [A-Z][a-z]+,? )', '\n', text)
+    text = re.sub(rf'(?<=[^,]\D\d\d|.\d\d\))( {SCHOOL_DEG_GROUP})? +(?=\S{{2,}}\s*[,.] [A-Z][a-zä]+,? )', '\n', text)
     return text
 
 
@@ -154,15 +200,15 @@ def parallel_preprocess_text(text: str) -> str:
 # compile frequently used regexes
 dead_re = re.compile(r'd(?:,|\.)?\s+(.*?\d ?\d{3})(?:,|\.)?\s*(.*)')
 reported_dead_re = re.compile(r'(?:Reported Dead|[\(\[]date unknown[\)\]])(?:,|\.)\s+(.+)')
-zip_re = re.compile(r'^(.*?(?:[A-Z][a-z]{1,3}|[A-Z]\.? ?[A-Z])(?:,|\.)?,?\s*\d{5}(?:-\d{4})?) ?(.*)')
-zip2_re = re.compile(rf'^(.*?(?:[A-Z][a-z]{{1,3}}|[A-Z]\.? ?[A-Z]))[,.]?,? ((?:{OCC_HOUSE_GROUP}[,.]?\s|{SCHOOL_DEG_GROUP}[\s\d]).*)')
+zip_re = re.compile(rf'^(.*?(?:[A-Z][a-z]{{1,4}}|[A-Z]\.? ?[A-Z]|[,.] {STATES})(?:,|\.)?,?\s*\d ?\d ?\d ?\d ?\d(?:-\d{{4}})?) ?(.*)')
+zip2_re = re.compile(rf'^(.{{5,}}?(?:[A-Z][a-z]{{1,4}}[,.]|[A-Z]\.? ?[A-Z]\.?|[,.] {STATES})),? ((?:{OCC_HOUSE_GROUP}[,.]?\s|{SCHOOL_DEG_GROUP}[\s\d]).*)')
 house_re = re.compile(r'(?:^| )([A-Z][A-Za-z])[,.]?\s+(\D.*)')
-degree_re = re.compile(rf'([A-Za-z]+) ?({HONORS_GROUP})? ?([\d\(\)\- ]+) ?({HONORS_GROUP})?(?:[ ,.]|$)')
-occupation_re = re.compile(rf'(?:^|[^,] )([A-Z][A-Za-z]{{1,3}})[,.]? (?!\d|{HONORS_GROUP})')
+degree_re = re.compile(rf'([A-Za-z]+) ?({HONORS_GROUP})? ?([\d\(][\d\(\)\- ]+) ?(?:([A-Za-z]+) \D)?({HONORS_GROUP})?(?:[ ,.]|$)')
+occupation_re = re.compile(rf'(?:^|[^,] )({OCC_GROUP})[,.]? (?!\d|{HONORS_GROUP})')
 see_other_re = re.compile(r'^see\s')
-profile_re = re.compile(r'^((?:[A-Z][A-Za-z\']*[ \-]|del? )*[A-Z][A-Za-z\']*)[,.]\s*(.+?[,.\)]) ?(.*)')
-first_re = re.compile(r'^(.+?)(?: \(([A-Z][a-z].*)\))?(?: (\S?\d\d))?[,.]?$')
-name_re = re.compile(r'^(\d?[A-Za-z\-ÖÄÏÜ\'’]+)(?:,|\.)?\s?(.*)')
+profile_re = re.compile(rf'^[^A-Z]?({LAST_NAME})[,.]\s*(.+?(?:, Jr\.?[.,]?)?(?:[,.] \d\d)?[,.\)]) ?(.*)')
+first_re = re.compile(r'^(.+?(?:, Jr\.?[.,]?)?)(?: \(([A-Z][a-zä].*)\))?(?: (\S?\d\d))?[,.]?$')
+name_re = re.compile(r'^(\d?[A-Za-zä\-ÖÄÏÜ\'’]+)(?:,|\.)?\s?(.*)')
 
 country_res = [re.compile(rf'(.*{country})(?:(?:,|\.|\s)\s*(.*)|[,.]?$)') for country in COUNTRIES]
 
@@ -186,7 +232,7 @@ def get_foreign_address(info: str, exclude=None) -> typing.Tuple[dict, str]:
         else:
             return {}, info
     info = country_search.group(2)
-    return {'address': country_search.group(1)}, '' if info is None else info
+    return {'address': country_search.group(1).strip(', ')}, '' if info is None else info
 
 
 def get_address(info: str) -> typing.Tuple[dict, str]:
@@ -199,7 +245,7 @@ def get_address(info: str) -> typing.Tuple[dict, str]:
         # solve problem where it sometimes picks up PO boxes
         zip_search = re.search('^(.*?[A-Z]\.? ?[A-Z](?:,|\.)?,?\s*\d{5}(?:-\d{4})?) ?(.*)', info)
     if zip_search is not None:
-        fields = {'address': zip_search.group(1)}
+        fields = {'address': zip_search.group(1).strip(', ')}
         info = zip_search.group(2)
         return fields, '' if info is None else info
     # look for foreign address
@@ -208,7 +254,7 @@ def get_address(info: str) -> typing.Tuple[dict, str]:
         # still haven't found anything
         zip_search = zip2_re.search(info)
         if zip_search is not None:
-            fields = {'address': zip_search.group(1)}
+            fields = {'address': zip_search.group(1).strip(', ')}
             info = zip_search.group(2)
             return fields, '' if info is None else info
 
@@ -224,47 +270,68 @@ def make_school_data_subs(info: str) -> str:
 def process_degree_data(degree_search: list) -> dict:
     fields = {}
     attendance = []
-    for code, distinction1, year, distinction2 in degree_search:
+    for code1, distinction1, year, code2, distinction2 in degree_search:
         degree_fields = {}
-        if code in SCHOOL_CODES:
-            degree_fields['school_code'] = code
-        elif code in DEGREE_CODES:
-            degree_fields['degree_code'] = code
+        if code1 in SCHOOL_CODES:
+            degree_fields['school_code'] = code1
+        elif not code2 and code1 in DEGREE_CODES:
+            degree_fields['degree_code'] = code1
         else:
-            degree_fields['degree_code'] = code + '?'
+            degree_fields['school_code'] = code1 + '?'
             fields['had_error'] = 1
         # add distinction if extant
         if distinction1 or distinction2:
             degree_fields['distinction'] = ' '.join((d for d in (distinction1, distinction2) if d))
+        # second code should be degree name if extant
+        if code2:
+            if code2 in DEGREE_CODES:
+                degree_fields['degree_code'] = code2
+            elif re.search(HONORS_GROUP, code2) and not degree_fields.get('distinction'):
+                degree_fields['distinction'] = code2
+            else:
+                degree_fields['degree_code'] = code2 + '?'
+                fields['had_error'] = 1
         # finally year
         if year:
-            degree_fields['year'] = year
+            degree_fields['year'] = year.strip()
         attendance.append(degree_fields)
     fields['attendance'] = attendance
     return fields
-            
+
 
 def get_school_data(info: str) -> dict:
-    fields = {}
     # separate degree elements
     info = re.sub(r'(?<=[A-Za-z])(?=[\d\(])', ' ', info)
     info = re.sub(r'(?<=[\d\)])(?=[A-Za-z])', ' ', info)
     # make substitutions to fix common typos
     info = make_school_data_subs(info)
-    # now look for house code
+    fields = {}
+    # look for house code
     house_search = house_re.search(info)
     if house_search is not None:
         house_code = house_search.group(1).capitalize()
         if house_code in HOUSE_CODES:
             fields['house_code'] = house_code
             info = house_search.group(2)
+    # do we have just an occupation code and a year remaining?
+    words = info.split(' ')
+    if (
+        len(words) == 2
+        and words[0] in OCCUPATION_CODES
+        and re.search(r'^\d\d$', words[1])
+    ):
+        fields['occupation_code'] = words[0]
+        fields['class_year'] = words[1]
+        return fields
+    # continue with typical approach
     # look for occupation code
     occupation_search = occupation_re.search(info)
     if occupation_search is not None:
         occupation = occupation_search.group(1)
-        if occupation not in OCCUPATION_CODES:
-            occupation += '?'
-            fields['had_error'] = 1
+        # I used OCC_GROUP in regex, so guaranteed to be an occupation code
+        # if occupation not in OCCUPATION_CODES:
+        #     occupation += '?'
+        #     fields['had_error'] = 1
         fields['occupation_code'] = occupation
     # next look for information about degrees (or school code for non-completers)
     degree_search = degree_re.findall(info)
@@ -317,61 +384,16 @@ def process_line(line: str) -> dict:
     return fields
 
 
-def get_datum(line: str, last_line: str = '') -> typing.Tuple[dict, str]:
-    if last_line:
-        datum = process_line(f'{last_line} {line}')
-        new_datum = process_line(line)
-        if not datum and not new_datum:
-            return {}, ''
-        if new_datum and datum.get('had_error'):
-            datum = new_datum
-        elif not datum:
-            return {}, ''
-    else:
-        datum = process_line(line)
-        if not datum:
-            return {}, ''
-    try:
-        return datum, line if datum.get('had_error') else ''
-    except KeyError:
-        print(datum, line, last_line)
-        raise
-
-
-def merge_wives(data: list) -> list:
-    # seperate first and last maiden names for married women in data
-    for person in data:
-        if person.get('alternate_name') is None or person.get('is_maiden_name'):
-            continue
-        name_search = name_re.search(person['alternate_name'])
-        if name_search is None:
-            person['had_error'] = 1
-            continue
-        person['married_last'] = person['last']
-        person['last'] = name_search.group(1)
-        person['married_first'] = person['first']
-        person['first'] = name_search.group(2)
-        del person['alternate_name']
-    # remove profiles that contain only maiden names
-    return [x for x in data if not x.get('is_maiden_name')]
-
-
 def process_all(lines: list) -> list:
     data = []
-    last_line = ''
-    last_datum = {}
     for line in lines:
         try:
-            datum, new_last_line = get_datum(line, last_line)
-            if last_datum and (new_last_line or not last_line):
-                data.append(last_datum)
-            last_line = new_last_line
-            last_datum = datum
+            datum = process_line(line)
+            if datum:
+                data.append(datum)
         except (AttributeError, TypeError, ValueError) as e:
             print(f'ERROR: {e} in "{line}"')
-    if last_datum:
-        data.append(last_datum)
-    return merge_wives(data)
+    return data
 
 
 def parallel_process_all(lines: list) -> list:
@@ -392,17 +414,6 @@ if __name__ == "__main__":
     text = parallel_preprocess_text(import_text())
 
     data = parallel_process_all(text.split('\n'))
-
-#     text = preprocess_text("""Alvarez, John Manuel Jr, 275 Round Hill Rd, Tiburon, Cal 94920 Mfg MBA 55
-# Alvarez, Jose Enrique, Union de Comer. & Industriales Tejadillo 57, Havana, Cuba gb49-50
-# Alvarez Carvajal, Jose J, Apartado Postal 996, Hojalata Y Lamina SA, Monterrey NL Mexico Bus gb66-67
-# Alvarez del Villar, Carlos, Estete 454, Trujillo, Peru g53-54
-# Alvarez-Guzman, Luis Teodoro, Ave 6A, No 28 N-49, Cali, Colombia L54-55
-# Alvarez-Marroquin, Adolfo, 6A Calle 3-73, Guatemala
-# City 1, Guatemala Arch MCP 52""")
-#     print(text)
-#     data = process_all(text.split('\n'))
-#     print(data)
 
     with open(os.path.join(DATA_DIR, 'data_1970.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
@@ -434,21 +445,6 @@ if __name__ == "__main__":
     c_deg = Counter(degree_codes_not_found)
     print(c_deg.most_common())
     
-    # occupations_not_found = []
-    # for d in data:
-    #     code = d.get('occupation_code')
-    #     if code and code.endswith('?'):
-    #         occupations_not_found.append(code)
-        
-    # c_occ = Counter(occupations_not_found)
-    # print(c_occ.most_common())
-
     error_count = len([d for d in data if d.get('had_error')])
     n_data =  len(data)
     print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
-
-
-    # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
-
-
-    # print('\n'.join([d['raw'] for d in data if d.get('attendance') is not None and any(a['degree_code'] == 'MA?' for a in d['attendance'] if a.get('degree_code'))]))

@@ -1,7 +1,7 @@
 {
     "C": "c",
     "ABcl": "AB cl",
-    "DrPh": "DrPH",
+    "Dr ?Ph": "DrPH",
     "\\(Hon\\)": "(hon)",
     "0(\\d\\d[\\d\\(\\)\\-]+)": "c \\2",
     "S": "s",
@@ -9,5 +9,16 @@
     "LLBmcl": "LLB mcl",
     "(\\S+)(m?cl)": "\\2 \\3",
     "ABw": "AB w",
-    "SBw": "SB w"
+    "SBw": "SB w",
+    "R[Cc]": "rc",
+    "Rg": "rg",
+    "Sp": "sp",
+    "mel": "mcl",
+    "Ia": "la",
+    "M": "m",
+    "Adj A": "AdjA",
+    "eb": "gb",
+    "(m?c)I": "\\2l",
+    "AB ?Ext ?St": "ABExtSt",
+    "PHD": "PhD"
 }

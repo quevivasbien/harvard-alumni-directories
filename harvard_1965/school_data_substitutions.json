@@ -2,10 +2,15 @@
     "C": "c",
     "ABcl": "AB cl",
     "DrPh": "DrPH",
-    "0(\\d\\d[\\d\\(\\)\\-]+)": "c \\2",
     "S": "s",
     "(\\d) (\\d)": "\\2\\3",
-    "Rc": "rc",
+    "R[Cc]": "rc",
     "Rg": "rg",
-    "mel": "mcl"
+    "Sp": "sp",
+    "mel": "mcl",
+    "Ia": "la",
+    "M": "m",
+    "Adj A": "AdjA",
+    "eb": "gb",
+    "(m?c)I": "\\2l"
 }

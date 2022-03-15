@@ -33,7 +33,7 @@ with open('school_data_substitutions.json', 'r') as fh:
 
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
-DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1980_2.4.2022.txt')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1980_3.11.2022.txt')
 
 
 def import_text() -> str:
@@ -474,17 +474,7 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
-#     text = """ALDEN, Bradford F, Indian Head National Bank, Exeter, NH 03833 C 45-46 Fin
-# ALDEN, Burton H, The Plymouth Group, 8441 Arjons Drive, San Diego, CA 92126 MBA 59 Mfg
-# ALDEN, George A, 208 Baldwin Ave, Meriden, CT 06450 Gp 43-44 Acc
-# ALDEN, Helga Ann, [See GOULD, Mrs Maurice S Jr]
-# John, 490 Post Street, San Francisco, CA 94102 MD 30 HS
-# alGEN, John E Jr, 215 Euclid Ave, Apt 311, Long Beach, CA 90803 MBA 69 (72) Oth
-# ALDEN, Mrs John J W, [HALL, Llewellyn Parsons], Box 854, Wolfville.N S, Canada MAT 58 W/M
-# ALDEN, John J W, 76 Highland Ave P O Box 854, Wolfville.N S, Canada BD 59 Edu
-# ALDEN, Mrs John M, [KELLER, Joan E], 380 Grove St, Needham, MA 02192 MAT 51 W/M"""
-#     text = preprocess_text(text)
-#     print(text)
+    print('Working on 1980...')
 
     text = parallel_preprocess_text(import_text())
 
@@ -504,7 +494,7 @@ if __name__ == "__main__":
             house_codes_not_found.append(code)
 
     c_house = Counter(house_codes_not_found)
-    print(c_house.most_common())
+    print(c_house.most_common(10))
 
     
     degree_codes_not_found = []
@@ -518,7 +508,7 @@ if __name__ == "__main__":
                 degree_codes_not_found.append(degree_code)
 
     c_deg = Counter(degree_codes_not_found)
-    print(c_deg.most_common())
+    print(c_deg.most_common(10))
     
     occupations_not_found = []
     for d in data:
@@ -527,11 +517,11 @@ if __name__ == "__main__":
             occupations_not_found.append(code)
         
     c_occ = Counter(occupations_not_found)
-    print(c_occ.most_common())
+    print(c_occ.most_common(10))
 
     error_count = len([d for d in data if 'had_error' in d['notes']])
     n_data =  len(data)
-    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}\n')
 
     # print('\n'.join([d['raw'] for d in data if d.get('house_code') == f'{args[1]}?']))
 

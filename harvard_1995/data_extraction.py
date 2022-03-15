@@ -38,7 +38,7 @@ with open('school_data_substitutions.json', 'r') as fh:
 
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
-DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1990_2.3.2022.txt')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1995_3.10.2022.txt')
 
 
 def import_text() -> str:
@@ -482,13 +482,13 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
-    print('Working on 1990...')
+    print('Working on 1995...')
 
     text = parallel_preprocess_text(import_text())
 
     data = parallel_process_all(text.split('\n'))
 
-    with open(os.path.join(DATA_DIR, 'data_1990.json'), 'w', encoding='utf-8') as fh:
+    with open(os.path.join(DATA_DIR, 'data_1995.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
     # for datum in data:

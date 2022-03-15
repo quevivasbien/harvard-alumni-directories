@@ -484,6 +484,8 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
+    print('Working on 2005...')
+
     # import sys
     # args = sys.argv
 
@@ -504,7 +506,7 @@ if __name__ == "__main__":
             house_codes_not_found.append(code)
 
     c_house = Counter(house_codes_not_found)
-    print(c_house.most_common())
+    print(c_house.most_common(10))
 
     
     degree_codes_not_found = []
@@ -518,7 +520,7 @@ if __name__ == "__main__":
                 degree_codes_not_found.append(degree_code)
 
     c_deg = Counter(degree_codes_not_found)
-    print(c_deg.most_common())
+    print(c_deg.most_common(10))
     
     occupations_not_found = []
     for d in data:
@@ -527,8 +529,8 @@ if __name__ == "__main__":
             occupations_not_found.append(code)
         
     c_occ = Counter(occupations_not_found)
-    print(c_occ.most_common())
+    print(c_occ.most_common(10))
 
     error_count = len([d for d in data if 'had_error' in d['notes']])
     n_data =  len(data)
-    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}\n')

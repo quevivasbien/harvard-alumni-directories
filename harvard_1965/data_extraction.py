@@ -37,7 +37,7 @@ with open('school_data_substitutions.json', 'r') as fh:
 
 DATA_DIR = '/mnt/LINUX600GB/zimmerman_docs/'
 OCR_DIR = os.path.join(DATA_DIR, 'ocr_ed/')
-DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1965_1.27.2022.txt')
+DATA_FILENAME = os.path.join(OCR_DIR, 'alumni_directory_1965_3.4.2022.txt')
 
 
 OCC_HOUSE_GROUP = '(?:' + '|'.join(OCCUPATION_CODES + HOUSE_CODES) + ')'
@@ -410,6 +410,8 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
+    print('Working on 1965...')
+
     text = parallel_preprocess_text(import_text())
 
     data = parallel_process_all(text.split('\n'))
@@ -417,33 +419,26 @@ if __name__ == "__main__":
     with open(os.path.join(DATA_DIR, 'data_1965.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
-    # print(json.dumps(data, indent=1))
-
     from collections import Counter
-
-    house_codes_not_found = []
-    for d in data:
-        code = d.get('house_code')
-        if code and code.endswith('?'):
-            house_codes_not_found.append(code)
-
-    c_house = Counter(house_codes_not_found)
-    print(c_house.most_common())
-
     
+    school_codes_not_found = []
     degree_codes_not_found = []
     for d in data:
         attendance = d.get('attendance')
         if not attendance:
             continue
         for item in attendance:
+            school_code = item.get('school_code')
             degree_code = item.get('degree_code')
+            if school_code and school_code.endswith('?'):
+                school_codes_not_found.append(school_code)
             if degree_code and degree_code.endswith('?'):
                 degree_codes_not_found.append(degree_code)
 
-    c_deg = Counter(degree_codes_not_found)
-    print(c_deg.most_common())
+    print(Counter(school_codes_not_found).most_common(10))
+
+    print(Counter(degree_codes_not_found).most_common(10))
 
     error_count = len([d for d in data if d.get('had_error')])
     n_data =  len(data)
-    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}\n')

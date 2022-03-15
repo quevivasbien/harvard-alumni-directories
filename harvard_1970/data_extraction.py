@@ -44,9 +44,9 @@ OCC_GROUP = '(?:' + '|'.join(OCCUPATION_CODES) + ')'
 SCHOOL_DEG_GROUP = '(?:' + '|'.join(SCHOOL_CODES + DEGREE_CODES) + ')'
 HONORS_GROUP = '|'.join(['\\(hon\\)', 'cl', 'mcl', 'scl', 'w', '\\(s\\)'])
 
-LAST_NAME = r'(?:[A-Z][A-Za-z\'ä]*[ \-]|d[ie]l? ?|von |y )*[A-Z][A-Za-z\'ä]*'
+LAST_NAME = r'(?:[A-Z][A-Za-z\'ä]*[ \-]|d[iea]l? ?|von |y )*[A-Z][A-Za-z\'ä]*'
 FIRST_NAME = r'(?:(?:Mrs|Dr) )?(?:[A-Z][a-zä]+ )?[A-Z][a-zä]+(?: \d\d)?(?:[,.] | \()'
-STATES = r'(?:Oregon|Ohio|Texas|Idaho|Puerto Rico|Conn|Maine|Florida|Virgin Islands|Alaska|Hawaii|Utah|Mass|Can|Cal|Mass|Ind|Kans|Md|Va|Ariz|Ill)'
+STATES = r'(?:Oregon|Ohio|Texas|Idaho|Puerto Rico|Conn|Maine|Florida|Virgin Islands|Alaska|Hawaii|Utah|Mass|Can|Cal|Mass|Ind|Kans|Md|Va|Ariz|Ill|Washington|Del|Colo|Tex|Okla|Can|Miss)'
 
 
 def import_text() -> str:
@@ -74,6 +74,7 @@ def fix_common_typos(text: str) -> str:
     text = re.sub(r'(?<=\s)U( ?\d\-)', 'L 1', text)
     text = re.sub(r'(?<=\s)SO(?=\d\-)', 's0', text)
     text = re.sub(r'(?<=\s[a-z])O(?=\d\-)', '0', text)
+    text = re.sub(r'(?<=[\d\(]\d)S', '5', text)
     # some edits relating to degree codes, etc.
     text = re.sub(r'(?<=[\d\-])O(?=[\d\-])', '0', text)
     text = re.sub(r'(?<=\s)SP(?= ?\d\d)', 'sp', text)
@@ -100,16 +101,23 @@ def fix_common_typos(text: str) -> str:
     # so Jamaica, NY doesn't get picked up as country of jamaica:
     text = re.sub('Jamaica Plain', 'JAMAICA PLAIN', text)  
     text = re.sub('Jamaica(?=(?: \d+)?, N\.? ?Y)', 'JAMAICA', text)
+    # fixing problem with williams name
+    text = re.sub(r"W. liams", "Williams", text)
     # # get rid of spaces in zip codes
     # text = re.sub(r'(\d) ?(\d) ?(\d) ?(\d) ?(\d)', r'\1\2\3\4\5', text)
-    text = text.replace('..', '.,').replace('’', '\'').replace('~', '-').replace('¿', 'g').replace('Madison, Wise', 'Madison, Wisc')
+    # PO Boxes followed by 5 digits can be mistaken for states & zip codes
+    text = re.sub(r' (P\.? ?O\.? )?Box (?=\d{5})', ' \\1Box #', text)
+    text = re.sub(r' +', ' ', text)
+    # Deal with clergy names
+    text = re.sub(r'Brother((?: [A-Z][a-z]*)+) ([A-Z][a-z]+)(?=,| \()', r'\2, Brother \1', text)
+    text = text.replace('..', '.,').replace('’', '').replace('\'', '').replace('~', '-').replace('¿', 'g').replace('Madison, Wise', 'Madison, Wisc')
     return text
 
 
 def split_lines(text: str) -> str:
     # split profiles that are on the same line
-    text = re.sub(rf'(?<=. |\d\d)({OCC_HOUSE_GROUP}|{HONORS_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}[,.] {FIRST_NAME})', '\\1\n', text)
-    text = re.sub(rf'(?<![EWNS] |.\d)((?: |\d\d){SCHOOL_DEG_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}\s*[,.] {FIRST_NAME})', '\\1\n', text)
+    text = re.sub(rf'(?<=.. |.\d\d|\d\d\))({OCC_HOUSE_GROUP}|{HONORS_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}[,.] {FIRST_NAME})', '\\1\n', text)
+    text = re.sub(rf'(?<![EWNS] |.\d)((?: |\d\d\)?){SCHOOL_DEG_GROUP})[^A-Za-z\d]? [^A-Za-z]? ?(?={LAST_NAME}\s*[,.] {FIRST_NAME})', '\\1\n', text)
     return text
 
 
@@ -150,7 +158,7 @@ def unsplit_lines(text: str) -> str:
 
 def split_lines2(text: str) -> str:
     # do another pass to split things that shouldn't have been combined
-    text = re.sub(rf'(?<=[^,]\D\d\d|.\d\d\))( {SCHOOL_DEG_GROUP})? +(?=\S{{2,}}\s*[,.] [A-Z][a-zä]+,? )', '\n', text)
+    text = re.sub(rf'(?<=[^,EWNS]\D\d\d|.\d\d\))( {SCHOOL_DEG_GROUP})? +(?=\S{{2,}}\s*[,.] [A-Z][a-zä]+,? )', '\n', text)
     return text
 
 
@@ -201,7 +209,7 @@ def parallel_preprocess_text(text: str) -> str:
 dead_re = re.compile(r'd(?:,|\.)?\s+(.*?\d ?\d{3})(?:,|\.)?\s*(.*)')
 reported_dead_re = re.compile(r'(?:Reported Dead|[\(\[]date unknown[\)\]])(?:,|\.)\s+(.+)')
 zip_re = re.compile(rf'^(.*?(?:[A-Z][a-z]{{1,4}}|[A-Z]\.? ?[A-Z]|[,.] {STATES})(?:,|\.)?,?\s*\d ?\d ?\d ?\d ?\d(?:-\d{{4}})?) ?(.*)')
-zip2_re = re.compile(rf'^(.{{5,}}?(?:[A-Z][a-z]{{1,4}}[,.]|[A-Z]\.? ?[A-Z]\.?|[,.] {STATES})),? ((?:{OCC_HOUSE_GROUP}[,.]?\s|{SCHOOL_DEG_GROUP}[\s\d]).*)')
+zip2_re = re.compile(rf'^(.{{5,}}?(?:[A-Z][a-z]{{1,4}}[,.]|[A-Z]\.? ?[A-Za-z]\.?|[,.] {STATES})),? ((?:{OCC_HOUSE_GROUP}[,.]?[\s\d]|{SCHOOL_DEG_GROUP}[\s\d]).*)')
 house_re = re.compile(r'(?:^| )([A-Z][A-Za-z])[,.]?\s+(\D.*)')
 degree_re = re.compile(rf'([A-Za-z]+) ?({HONORS_GROUP})? ?([\d\(][\d\(\)\- ]+) ?(?:([A-Za-z]+) \D)?({HONORS_GROUP})?(?:[ ,.]|$)')
 occupation_re = re.compile(rf'(?:^|[^,] )({OCC_GROUP})[,.]? (?!\d|{HONORS_GROUP})')
@@ -274,7 +282,7 @@ def process_degree_data(degree_search: list) -> dict:
         degree_fields = {}
         if code1 in SCHOOL_CODES:
             degree_fields['school_code'] = code1
-        elif not code2 and code1 in DEGREE_CODES:
+        elif (not code2 or (code2 not in DEGREE_CODES)) and code1 in DEGREE_CODES:
             degree_fields['degree_code'] = code1
         else:
             degree_fields['school_code'] = code1 + '?'
@@ -287,6 +295,7 @@ def process_degree_data(degree_search: list) -> dict:
             if code2 in DEGREE_CODES:
                 degree_fields['degree_code'] = code2
             elif re.search(HONORS_GROUP, code2) and not degree_fields.get('distinction'):
+                # Figure out if this is mistakenly an honors code
                 degree_fields['distinction'] = code2
             else:
                 degree_fields['degree_code'] = code2 + '?'
@@ -329,9 +338,6 @@ def get_school_data(info: str) -> dict:
     if occupation_search is not None:
         occupation = occupation_search.group(1)
         # I used OCC_GROUP in regex, so guaranteed to be an occupation code
-        # if occupation not in OCCUPATION_CODES:
-        #     occupation += '?'
-        #     fields['had_error'] = 1
         fields['occupation_code'] = occupation
     # next look for information about degrees (or school code for non-completers)
     degree_search = degree_re.findall(info)
@@ -411,6 +417,8 @@ def parallel_process_all(lines: list) -> list:
 
 if __name__ == "__main__":
 
+    print('Working on 1970...')
+
     text = parallel_preprocess_text(import_text())
 
     data = parallel_process_all(text.split('\n'))
@@ -418,33 +426,26 @@ if __name__ == "__main__":
     with open(os.path.join(DATA_DIR, 'data_1970.json'), 'w', encoding='utf-8') as fh:
         json.dump(data, fh)
 
-    # print(json.dumps(data, indent=1))
-
     from collections import Counter
 
-    house_codes_not_found = []
-    for d in data:
-        code = d.get('house_code')
-        if code and code.endswith('?'):
-            house_codes_not_found.append(code)
-
-    c_house = Counter(house_codes_not_found)
-    print(c_house.most_common())
-
-    
+    school_codes_not_found = []
     degree_codes_not_found = []
     for d in data:
         attendance = d.get('attendance')
         if not attendance:
             continue
         for item in attendance:
+            school_code = item.get('school_code')
             degree_code = item.get('degree_code')
+            if school_code and school_code.endswith('?'):
+                school_codes_not_found.append(school_code)
             if degree_code and degree_code.endswith('?'):
                 degree_codes_not_found.append(degree_code)
 
-    c_deg = Counter(degree_codes_not_found)
-    print(c_deg.most_common())
+    print(Counter(school_codes_not_found).most_common(10))
+
+    print(Counter(degree_codes_not_found).most_common(10))
     
     error_count = len([d for d in data if d.get('had_error')])
     n_data =  len(data)
-    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}')
+    print(f'Error rate: {error_count} / {n_data} = {error_count / n_data:.4f}\n')

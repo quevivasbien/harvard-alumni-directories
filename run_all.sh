@@ -19,6 +19,9 @@ python data_extraction.py
 cd ../harvard_1990
 python data_extraction.py
 
+cd ../harvard_1995
+python data_extraction.py
+
 cd ../harvard_2000
 python data_extraction.py
 
